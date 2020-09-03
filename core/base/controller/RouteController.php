@@ -5,16 +5,11 @@ namespace core\base\controller;
 use core\base\settings\Settings;
 use core\base\settings\ShopSettings;
 
-class RouteControllers
+class RouteControllers extends BaseController
 {
     static private $_instance;
 
     protected $routes;
-
-    protected $controller;
-    protected $inputMethod;
-    protected $outputMethod;
-    protected $parameters;
 
     static public function getInstance(){
         if(self::$_instance instanceof self){
@@ -29,8 +24,6 @@ class RouteControllers
     }
 
     private function __construct() {
-       /*  $s = Settings::get("routes");
-        $s1 = ShopSettings::get('property1'); */
 
         $adress_str = $_SERVER['REQUEST_URI'];
 
@@ -38,17 +31,43 @@ class RouteControllers
             $this->redirect(rtrim($adress_str, '/'), 301);
         }
 
-        $path = substr($_SERVER['PHP_SELF'], 0, strrpos($_SERVER['PHP_SELF'], 'index.php'));
+        $path = substr($_SERVER['PHP_SELF'], 0, strpos($_SERVER['PHP_SELF'], 'index.php'));
         if($path === PATH) {
 
-            $this->routes = $settings::get('routes');
+            $this->routes = Settings::get('routes');
             
-            if(!this->routes) throw new RouteException('Сайт находится на техничеком обслуживании');
+            if(!$this->routes) throw new RouteException('Сайт находится на техничеком обслуживании');
+            $url = explode('/', substr($adress_str, strlen(PATH)));
+            if($url[0] && $url[0] === $this->routes['admin']['alias']) {
+                array_shift($url);
+            }
 
-            if(strpos($adress_str, $this->routes['admin', 'alias']) === strlen(PATH)) {
-                /*админка*/
+            
+
+                if($url[0] && is_dir($_SERVER['DOCUMENT_ROOT'] . PATH . $this->routes['plugins']['path'] . $url[0])) {
+                    $plugins = array_shift($url);
+                    $pluginSettings = $this->routes['setting']['path'] . ucfirst($plugins . 'Settings');
+
+                    if(file_exists($_SERVER['DOCUMENT_ROOT'] . PATH . $pluginSettings . '.php')) {
+                        $pluginSettings = str_replace('/', '\\',$pluginSettings);
+                        $this->routes = $pluginSettings::get('routes');
+                    }
+                    $dir = $this->routes['plugins']['dir'] ? '/' . $this->routes['plugins']['dir'] . '/' : '/';
+                    $dir = str_replace('//','/', $dir);
+
+                    $this->controller = $this->routes['plugins']['path'] . $plugins . $dir;
+
+                    $hrUrl = $this->routes['plugins']['hrUrl'];
+                    $route = 'plugins';
+                }else{
+                    $this->controller = $this->routes['admin']['path'];
+                    $hrUrl = $this->routes['admin']['hrUrl'];
+                    $route = 'admin';
+                }
+            
+            
             }else {
-                $url = explode('/', substr($adress_str, strlen(PATH)));
+               
                 $hrUrl = $this->routes['user']['hrUrl'];
 
                 $this->controller = $this->routes['user']['path'];
@@ -56,12 +75,32 @@ class RouteControllers
             }
             $this->createRoute($route, $url);
 
-            
+            if($url[1]) {
+                $count = count($url);
+                $key = '';
+
+                if(!$hrUrl) {
+                    $i = 1;
+                }else{
+                    $this->parameters['alias'] = $url[1];
+                    $i = 2;
+                }
+                for(; $i<$count; $i++) {
+                    if(!$key){
+                        $key = $url[$i];
+                        $this->parameters[$key] ='';
+                    }else{
+                        $this->parameters[$key] =$url[$i];
+                        $key = '';
+                    }
+                }
+            }
+
             exit();
 
         }else{
             try{
-                throw new \Exception('Не корректная директория сайта')
+                throw new \Exception('Не корректная директория сайта');
             }
             catch(\Exception $e){
                 exit($e->getMesagge());
